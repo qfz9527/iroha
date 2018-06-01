@@ -12,12 +12,10 @@ def mergePullRequest() {
 				 -H "Accept: application/vnd.github.v3+json" \
 				 -X PUT --data '{"commit_title":"${commitTitle}","commit_message":"${commitMessage}","sha":"${env.GIT_COMMIT}","merge_method":"${mergeMethod}"}' \
 				 -w "%{http_code}" https://api.github.com/repos/hyperledger/iroha/pulls/${CHANGE_ID}/merge""", returnStdout: true)
-		def githubResponce = sh(script:"""set +x; printf '%s\n' "${jsonResponseMerge}" | tail -n 1; set -x""", returnStdout: true).trim()
-		if ( ! ( githubResponce ==~ "200" ) ) {
-			return false
-		}
+		def githubResponse = sh(script:"""set +x; printf '%s\n' "${jsonResponseMerge}" | tail -n 1; set -x""", returnStdout: true).trim()
 		jsonResponseMerge = slurper.parseText(jsonResponseMerge)
-		if (jsonResponseMerge.merged != "true") {
+		if (jsonResponseMerge.merged != "true" || !(githubResponse ==~ "200")) {
+			echo jsonResponseMerge.message
 			return false
 		}
 		return true
@@ -104,8 +102,8 @@ def writePullRequestComment() {
 			-X POST --data '{"body":"${ghUsersList} commit ${env.GIT_COMMIT} build status: ${currentBuild.currentResult}. build URL: ${BUILD_URL}"}' \
 			-w "%{http_code}" https://api.github.com/repos/hyperledger/iroha/issues/${CHANGE_ID}/comments
 			""", returnStdout: true).trim()		
-		def githubResponce = sh(script:"""set +x; printf '%s\n' "${jsonResponseComment}" | tail -n 1 ; set -x""", returnStdout: true).trim()
-		if (githubResponce ==~ "201") {
+		def githubResponse = sh(script:"""set +x; printf '%s\n' "${jsonResponseComment}" | tail -n 1 ; set -x""", returnStdout: true).trim()
+		if (githubResponse ==~ "201") {
 			return true
 		}
 	}

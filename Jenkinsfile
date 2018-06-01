@@ -47,9 +47,10 @@ pipeline {
     IROHA_POSTGRES_PASSWORD = "${GIT_COMMIT}"
     IROHA_POSTGRES_PORT = 5432
 
-    dockerAgentImage = ''
-    dockerImageFile = ''
-    workspace_path = ''
+    DOCKER_AGENT_IMAGE = ''
+    DOCKER_IMAGE_FILE = ''
+    WORKSPACE_PATH = ''
+    PREVIOUS_COMMIT = ''
   }
 
   options {
@@ -79,7 +80,7 @@ pipeline {
             anyOf {
               expression { return params.Linux }
               allOf {
-                expression { return env.CHANGE_ID != null}
+                expression { return env.CHANGE_ID != null }
                 expression { return env.GIT_PREVIOUS_COMMIT != null }
                 expression { return env.CHANGE_TARGET ==~ /(master|develop|trunk)/ }
                 expression { return params.Merge_PR }
@@ -89,15 +90,29 @@ pipeline {
           agent { label 'x86_64_aws_build' }
           steps {
             script {
-              if ( params.BUILD_TYPE == 'Debug' || params.Merge_PR ) {
-                def debugBuild = load ".jenkinsci/debug-build.groovy"
-                def coverage = load ".jenkinsci/selected-branches-coverage.groovy"
-                if ( params.Merge_PR ) { debugBuild.doDebugBuild(true) }
-                else { debugBuild.doDebugBuild(coverage.selectedBranchesCoverage()) }
+              def debugBuild = load ".jenkinsci/debug-build.groovy"
+              def coverage = load ".jenkinsci/selected-branches-coverage.groovy"
+              if (params.BUILD_TYPE == 'Debug') {
+                if (params.Merge_PR && env.CHANGE_TARGET ==~ /master/) {
+                  debugBuild.doDebugBuild(true)
+                }
+                else {
+                  debugBuild.doDebugBuild(coverage.selectedBranchesCoverage())
+                }
               }
-              else {
+              if (params.BUILD_TYPE == 'Release') {
                 def releaseBuild = load ".jenkinsci/release-build.groovy"
                 releaseBuild.doReleaseBuild()
+              }
+            }
+          }
+          post {
+            success {
+              script {
+                if (params.BUILD_TYPE == 'Release') {
+                  def post = load ".jenkinsci/linux-post-step.groovy"
+                  post.postStep()
+                }
               }
             }
           }
@@ -108,7 +123,7 @@ pipeline {
             anyOf {
               expression { return params.ARMv7 }
               allOf {
-                expression { return env.CHANGE_ID != null}
+                expression { return env.CHANGE_ID != null }
                 expression { return env.GIT_PREVIOUS_COMMIT != null }
                 expression { return env.CHANGE_TARGET ==~ /(master|develop|trunk)/ }
                 expression { return params.Merge_PR }
@@ -129,6 +144,16 @@ pipeline {
               }
             }
           }
+          post {
+            success {
+              script {
+                if (params.BUILD_TYPE == 'Release') {
+                  def post = load ".jenkinsci/linux-post-step.groovy"
+                  post.postStep()
+                }
+              }
+            }
+          }
         }
         stage('ARMv8') {
           when {
@@ -136,7 +161,7 @@ pipeline {
             anyOf {
               expression { return params.ARMv8 }
               allOf {
-                expression { return env.CHANGE_ID != null}
+                expression { return env.CHANGE_ID != null }
                 expression { return env.GIT_PREVIOUS_COMMIT != null }
                 expression { return env.CHANGE_TARGET ==~ /(master|develop|trunk)/ }
                 expression { return params.Merge_PR }
@@ -157,6 +182,16 @@ pipeline {
               }
             }
           }
+          post {
+            success {
+              script {
+                if (params.BUILD_TYPE == 'Release') {
+                  def post = load ".jenkinsci/linux-post-step.groovy"
+                  post.postStep()
+                }
+              }
+            }
+          }
         }
         stage('MacOS') {
           when {
@@ -164,10 +199,10 @@ pipeline {
             anyOf {
               allOf {
                 expression { return env.CHANGE_ID != null }
-                not { expression { return env.GIT_PREVIOUS_COMMIT != null } }
+                expression { return !env.GIT_PREVIOUS_COMMIT }
               }
               allOf {
-                expression { return env.CHANGE_ID != null}
+                expression { return env.CHANGE_ID != null }
                 expression { return env.GIT_PREVIOUS_COMMIT != null }
                 expression { return env.CHANGE_TARGET ==~ /(master|develop|trunk)/ }
                 expression { return params.Merge_PR }
@@ -189,6 +224,16 @@ pipeline {
               }
             }
           }
+          post {
+            success {
+              script {
+                if (params.BUILD_TYPE == 'Release') {
+                  def post = load ".jenkinsci/linux-post-step.groovy"
+                  post.macPostStep()
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -198,10 +243,10 @@ pipeline {
           expression { params.Coverage }  // by request
           allOf {
             expression { return env.CHANGE_ID }
-            not { expression { return env.GIT_PREVIOUS_COMMIT } }
+            expression { return !env.GIT_PREVIOUS_COMMIT }
           }
           allOf {
-            expression { return env.CHANGE_ID != null}
+            expression { return env.CHANGE_ID != null }
             expression { return env.GIT_PREVIOUS_COMMIT != null }
             expression { return env.CHANGE_TARGET ==~ /(master|develop|trunk)/ }
             expression { return params.Merge_PR }
@@ -214,26 +259,9 @@ pipeline {
       }
       steps {
         script {
-          def cov_platform = ''
-          if (params.Linux) {
-            cov_platform = 'x86_64_aws_cov'
-          }
-          if (!params.Linux && params.MacOS) {
-            cov_platform = 'mac'
-          }
-          if (!params.Linux && !params.MacOS && params.ARMv8) {
-            cov_platform = 'armv8'
-          }
-          else if (!params.Linux && !params.MacOS && !params.ARMv8) {
-            cov_platform = 'armv7'
-          }
-          node(cov_platform) {
-            if (cov_platform == 'mac') {
-              coverage = load '.jenkinsci/mac-debug-build.groovy'
-            }
-            else {
-              coverage = load '.jenkinsci/debug-build.groovy'
-            }
+          def cov_platform = load '.jenkinsci/choose-platform.groovy'
+          node(cov_platform.choosePlatform()) {
+            coverage = load env.NODE_NAME.contains('mac') ? '.jenkinsci/mac-debug-build.groovy' : '.jenkinsci/debug-build.groovy'
             coverage.doPreCoverageStep()
           }
         }
@@ -242,9 +270,7 @@ pipeline {
     stage('Tests') {
       when {
         beforeAgent true
-        anyOf {
-          expression { return params.BUILD_TYPE == "Debug" }
-        }
+        expression { return params.BUILD_TYPE == "Debug" }
       }
       parallel {
         stage('Linux') {
@@ -253,7 +279,7 @@ pipeline {
             anyOf {
               expression { return params.Linux }
               allOf {
-                expression { return env.CHANGE_ID != null}
+                expression { return env.CHANGE_ID != null }
                 expression { return env.GIT_PREVIOUS_COMMIT != null }
                 expression { return env.CHANGE_TARGET ==~ /(master|develop|trunk)/ }
                 expression { return params.Merge_PR }
@@ -275,7 +301,7 @@ pipeline {
             anyOf {
               expression { return params.ARMv7 }
               allOf {
-                expression { return env.CHANGE_ID != null}
+                expression { return env.CHANGE_ID != null }
                 expression { return env.GIT_PREVIOUS_COMMIT != null }
                 expression { return env.CHANGE_TARGET ==~ /(master|develop|trunk)/ }
                 expression { return params.Merge_PR }
@@ -297,7 +323,7 @@ pipeline {
             anyOf {
               expression { return params.ARMv8 }
               allOf {
-                expression { return env.CHANGE_ID != null}
+                expression { return env.CHANGE_ID != null }
                 expression { return env.GIT_PREVIOUS_COMMIT != null }
                 expression { return env.CHANGE_TARGET ==~ /(master|develop|trunk)/ }
                 expression { return params.Merge_PR }
@@ -319,10 +345,10 @@ pipeline {
             anyOf {
               allOf {
                 expression { return env.CHANGE_ID }
-                not { expression { return env.GIT_PREVIOUS_COMMIT } }
+                expression { return !env.GIT_PREVIOUS_COMMIT }
               }
               allOf {
-                expression { return env.CHANGE_ID != null}
+                expression { return env.CHANGE_ID != null }
                 expression { return env.GIT_PREVIOUS_COMMIT != null }
                 expression { return env.CHANGE_TARGET ==~ /(master|develop|trunk)/ }
                 expression { return params.Merge_PR }
@@ -342,64 +368,18 @@ pipeline {
       }
     }
     stage('Post-Coverage') {
-      when {
-        anyOf {
-          expression { params.Coverage }  // by request
-          allOf {
-            expression { return env.CHANGE_ID }
-            not { expression { return env.GIT_PREVIOUS_COMMIT } }
-          }
-          allOf {
-            expression { return env.CHANGE_ID != null}
-            expression { return env.GIT_PREVIOUS_COMMIT != null }
-            expression { return env.CHANGE_TARGET ==~ /(master|develop|trunk)/ }
-            expression { return params.Merge_PR }
-          }
-          allOf {
-            expression { return params.BUILD_TYPE == 'Debug' }
-            expression { return env.GIT_LOCAL_BRANCH ==~ /master/ }
-          }
-        }
-      }
       parallel {
         stage('lcov_cobertura') {
-          steps {
-            script {
-              def cov_platform = ''
-              if (params.Linux) {
-                cov_platform = 'x86_64_aws_cov'
-              }
-              if (!params.Linux && params.MacOS) {
-                cov_platform = 'mac'
-              }
-              if (!params.Linux && !params.MacOS && params.ARMv8) {
-                cov_platform = 'armv8'
-              }
-              else if (!params.Linux && !params.MacOS && !params.ARMv8) {
-                cov_platform = 'armv7'
-              }
-              node(cov_platform) {
-                if (cov_platform == 'mac') {
-                  coverage = load '.jenkinsci/mac-debug-build.groovy'
-                }
-                else {
-                  coverage = load '.jenkinsci/debug-build.groovy'
-                }
-                  coverage.doPostCoverageCoberturaStep()
-              }
-            }
-          }
-        }
-        stage('sonarqube') {
           when {
+            beforeAgent true
             anyOf {
               expression { params.Coverage }  // by request
               allOf {
                 expression { return env.CHANGE_ID }
-                not { expression { return env.GIT_PREVIOUS_COMMIT } }
+                expression { return !env.GIT_PREVIOUS_COMMIT }
               }
               allOf {
-                expression { return env.CHANGE_ID != null}
+                expression { return env.CHANGE_ID != null }
                 expression { return env.GIT_PREVIOUS_COMMIT != null }
                 expression { return params.Merge_PR }
               }
@@ -408,29 +388,42 @@ pipeline {
                 expression { return env.GIT_LOCAL_BRANCH ==~ /master/ }
               }
             }
-          } 
+          }
           steps {
             script {
-              def cov_platform = ''
-              if (params.Linux) {
-                cov_platform = 'x86_64_aws_cov'
+              def cov_platform = load '.jenkinsci/choose-platform.groovy'
+              node(cov_platform.choosePlatform()) {
+                coverage = load env.NODE_NAME.contains('mac') ? '.jenkinsci/mac-debug-build.groovy' : '.jenkinsci/debug-build.groovy'
+                coverage.doPostCoverageCoberturaStep()
               }
-              if (!params.Linux && params.MacOS) {
-                cov_platform = 'mac'
+            }
+          }
+        }
+        stage('sonarqube') {
+          when {
+            beforeAgent true
+            anyOf {
+              expression { params.Coverage }  // by request
+              allOf {
+                expression { return env.CHANGE_ID }
+                expression { return !env.GIT_PREVIOUS_COMMIT }
               }
-              if (!params.Linux && !params.MacOS && params.ARMv8) {
-                cov_platform = 'armv8'
+              allOf {
+                expression { return env.CHANGE_ID != null }
+                expression { return env.GIT_PREVIOUS_COMMIT != null }
+                expression { return params.Merge_PR }
               }
-              else if (!params.Linux && !params.MacOS && !params.ARMv8) {
-                cov_platform = 'armv7'
+              allOf {
+                expression { return params.BUILD_TYPE == 'Debug' }
+                expression { return env.GIT_LOCAL_BRANCH ==~ /master/ }
               }
-              node(cov_platform) {
-                if (cov_platform == 'mac') {
-                  coverage = load '.jenkinsci/mac-debug-build.groovy'
-                }
-                else {
-                  coverage = load '.jenkinsci/debug-build.groovy'
-                }
+            }
+          }
+          steps {
+            script {
+              def cov_platform = load '.jenkinsci/choose-platform.groovy'
+              node(cov_platform.choosePlatform()) {
+                coverage = load env.NODE_NAME.contains('mac') ? '.jenkinsci/mac-debug-build.groovy' : '.jenkinsci/debug-build.groovy'
                 coverage.doPostCoverageSonarStep()
               }
             }
@@ -442,34 +435,33 @@ pipeline {
       parallel {
         stage('Build release') {
           when {
-            allOf {
-              expression { return params.BUILD_TYPE == 'Debug' }
-              expression { return env.GIT_LOCAL_BRANCH ==~ /(develop|master|trunk)/ }
+            anyOf {
+              allOf {
+                expression { return params.BUILD_TYPE == 'Debug' }
+                expression { return env.GIT_LOCAL_BRANCH ==~ /(develop|master|trunk)/ }
+              }
+              allOf {
+                expression { return env.CHANGE_ID != null }
+                expression { return env.GIT_PREVIOUS_COMMIT != null }
+                expression { return env.CHANGE_TARGET ==~ /(master|develop)/ }
+                expression { return params.Merge_PR }
+              }
             }
           }
-          steps{
+          agent { label 'x86_64_aws_build' }
+          steps {
             script {
-              def build_platform = ''
-              if (params.Linux) {
-                build_platform = 'x86_64_aws_build'
-              }
-              if (!params.Linux && params.MacOS) {
-                build_platform = 'mac'
-              }
-              if (!params.Linux && !params.MacOS && params.ARMv8) {
-                build_platform = 'armv8'
-              }
-              else if (!params.Linux && !params.MacOS && !params.ARMv8) {
-                build_platform = 'armv7'
-              }
-              node(build_platform) {
-                if (build_platform == 'mac') {
-                  releaseBuild = load ".jenkinsci/mac-release-build.groovy"
+              def releaseBuild = load '.jenkinsci/release-build.groovy'
+              releaseBuild.doReleaseBuild()
+            }
+          }
+          post {
+            success {
+              script {
+                if (params.BUILD_TYPE == 'Release') {
+                  def post = load ".jenkinsci/linux-post-step.groovy"
+                  post.postStep()
                 }
-                else {
-                  releaseBuild = load ".jenkinsci/release-build.groovy"
-                }
-                releaseBuild.doReleaseBuild()
               }
             }
           }
@@ -483,7 +475,7 @@ pipeline {
                 expression { return GIT_LOCAL_BRANCH ==~ /(master|develop|trunk)/ }
               }
               allOf {
-                expression { return env.CHANGE_ID != null}
+                expression { return env.CHANGE_ID != null }
                 expression { return env.GIT_PREVIOUS_COMMIT != null }
                 expression { return env.CHANGE_TARGET ==~ /(master|develop)/ }
                 expression { return params.Merge_PR }
@@ -509,7 +501,7 @@ pipeline {
               expression { return params.JavaBindings }
               expression { return params.AndroidBindings }
               allOf {
-                expression { return env.CHANGE_ID != null}
+                expression { return env.CHANGE_ID != null }
                 expression { return env.GIT_PREVIOUS_COMMIT != null }
                 expression { return env.CHANGE_TARGET ==~ /(master|develop)/ }
                 expression { return params.Merge_PR }
@@ -608,28 +600,28 @@ pipeline {
         def notify = load ".jenkinsci/notifications.groovy"
         notify.notifyBuildResults()
 
-        if ( params.Linux ) {
+        if (params.Linux || params.Merge_PR) {
           node ('x86_64_aws_test') {
             def post = load ".jenkinsci/linux-post-step.groovy"
-            post.linuxPostStep()
+            post.cleanUp()
           }
         }
-        if ( params.ARMv8 ) {
+        if (params.ARMv8 || params.Merge_PR) {
           node ('armv8') {
             def post = load ".jenkinsci/linux-post-step.groovy"
-            post.linuxPostStep()
+            post.cleanUp()
           }
         }
-        if ( params.ARMv7 ) {
+        if (params.ARMv7 || params.Merge_PR) {
           node ('armv7') {
             def post = load ".jenkinsci/linux-post-step.groovy"
-            post.linuxPostStep()
+            post.cleanUp()
           }
         }
-        if ( params.MacOS ) {
+        if (params.MacOS || params.Merge_PR) {
           node ('mac') {
             def post = load ".jenkinsci/linux-post-step.groovy"
-            post.linuxPostStep()
+            post.macCleanUp()
           }
         }
       }

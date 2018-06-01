@@ -6,25 +6,25 @@ def doDebugBuild(coverageEnabled=false) {
   def pCommit = load ".jenkinsci/previous-commit.groovy"
   def parallelism = params.PARALLELISM
   def platform = sh(script: 'uname -m', returnStdout: true).trim()
-  def previousCommit = pCommit.previousCommitOrCurrent()
+  PREVIOUS_COMMIT = pCommit.previousCommitOrCurrent()
   // params are always null unless job is started
   // this is the case for the FIRST build only.
   // So just set this to same value as default. 
   // This is a known bug. See https://issues.jenkins-ci.org/browse/JENKINS-41929
-  if (parallelism == null) {
+  if (!parallelism) {
     parallelism = 4
   }
   if (env.NODE_NAME.contains('arm7')) {
     parallelism = 1
   }
-  if ( env.NODE_NAME.contains('x86_64')) {
+  if (env.NODE_NAME.contains('x86_64')) {
     parallelism = 8
   }
   // count docker image file in case there could be pre-build image saved in file
 
   def iC = dPullOrBuild.dockerPullOrUpdate("${platform}-develop-build",
                                            "${env.GIT_RAW_BASE_URL}/${env.GIT_COMMIT}/docker/develop/Dockerfile",
-                                           "${env.GIT_RAW_BASE_URL}/${previousCommit}/docker/develop/Dockerfile",
+                                           "${env.GIT_RAW_BASE_URL}/${PREVIOUS_COMMIT}/docker/develop/Dockerfile",
                                            "${env.GIT_RAW_BASE_URL}/develop/docker/develop/Dockerfile",
                                            ['PARALLELISM': parallelism])
   if (GIT_LOCAL_BRANCH == 'develop' && manifest.manifestSupportEnabled()) {
@@ -84,21 +84,20 @@ def doDebugBuild(coverageEnabled=false) {
 
 def doPreCoverageStep() {
   if ( env.NODE_NAME.contains('x86_64') ) {
-    sh "docker load -i ${JENKINS_DOCKER_IMAGE_DIR}/${dockerImageFile}"
+    sh "docker load -i ${JENKINS_DOCKER_IMAGE_DIR}/${DOCKER_IMAGE_FILE}"
   }
-  def iC = docker.image("${dockerAgentImage}")
-  iC.inside(""
-  + " -v ${CCACHE_DIR}:${CCACHE_DIR}") {
+  def iC = docker.image("${DOCKER_AGENT_IMAGE}")
+  iC.inside() {
     sh "cmake --build build --target coverage.init.info"
   }
 }
 
 def doTestStep(testList) {
-  if ( env.NODE_NAME.contains('x86_64') ) {
-    sh "docker load -i ${JENKINS_DOCKER_IMAGE_DIR}/${dockerImageFile}"
+  if (env.NODE_NAME.contains('x86_64')) {
+    sh "docker load -i ${JENKINS_DOCKER_IMAGE_DIR}/${DOCKER_IMAGE_FILE}"
   }
 
-  def iC = docker.image("${dockerAgentImage}")
+  def iC = docker.image("${DOCKER_AGENT_IMAGE}")
   sh "docker network create ${env.IROHA_NETWORK}"
 
   docker.image('postgres:9.5').withRun(""
@@ -111,9 +110,7 @@ def doTestStep(testList) {
       + " -e IROHA_POSTGRES_PORT=${env.IROHA_POSTGRES_PORT}"
       + " -e IROHA_POSTGRES_USER=${env.IROHA_POSTGRES_USER}"
       + " -e IROHA_POSTGRES_PASSWORD=${env.IROHA_POSTGRES_PASSWORD}"
-      + " --network=${env.IROHA_NETWORK}"
-      + " -v ${CCACHE_DIR}:${CCACHE_DIR}"
-      + " -v /tmp/${GIT_COMMIT}-${BUILD_NUMBER}:/tmp/${GIT_COMMIT}") {
+      + " --network=${env.IROHA_NETWORK}") {
         def testExitCode = sh(script: """cd build && ctest --output-on-failure -R '${testList}' """, returnStatus: true)
         if (testExitCode != 0) {
           currentBuild.result = "UNSTABLE"
@@ -123,13 +120,11 @@ def doTestStep(testList) {
 }
 
 def doPostCoverageCoberturaStep() {
-  if ( env.NODE_NAME.contains('x86_64') ) {
-    sh "docker load -i ${JENKINS_DOCKER_IMAGE_DIR}/${dockerImageFile}"
+  if (env.NODE_NAME.contains('x86_64')) {
+    sh "docker load -i ${JENKINS_DOCKER_IMAGE_DIR}/${DOCKER_IMAGE_FILE}"
   }
-  def iC = docker.image("${dockerAgentImage}")
-
-  iC.inside(""
-  + " -v ${CCACHE_DIR}:${CCACHE_DIR}") {
+  def iC = docker.image("${DOCKER_AGENT_IMAGE}")
+  iC.inside() {
     sh "cmake --build build --target coverage.info"
     sh "python /tmp/lcov_cobertura.py build/reports/coverage.info -o build/reports/coverage.xml"
     cobertura autoUpdateHealth: false, autoUpdateStability: false, coberturaReportFile: '**/build/reports/coverage.xml', conditionalCoverageTargets: '75, 50, 0', failUnhealthy: false, failUnstable: false, lineCoverageTargets: '75, 50, 0', maxNumberOfBuilds: 50, methodCoverageTargets: '75, 50, 0', onlyStable: false, zoomCoverageChart: false
@@ -137,13 +132,11 @@ def doPostCoverageCoberturaStep() {
 }
 
 def doPostCoverageSonarStep() {
-  if ( env.NODE_NAME.contains('x86_64') ) {
-    sh "docker load -i ${JENKINS_DOCKER_IMAGE_DIR}/${dockerImageFile}"
+  if (env.NODE_NAME.contains('x86_64')) {
+    sh "docker load -i ${JENKINS_DOCKER_IMAGE_DIR}/${DOCKER_IMAGE_FILE}"
   }
-  def iC = docker.image("${dockerAgentImage}")
-
-  iC.inside(""
-  + " -v ${CCACHE_DIR}:${CCACHE_DIR}") {
+  def iC = docker.image("${DOCKER_AGENT_IMAGE}")
+  iC.inside() {
     sh "cmake --build build --target cppcheck"
     sh """
       sonar-scanner \

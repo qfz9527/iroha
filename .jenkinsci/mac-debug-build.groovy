@@ -1,6 +1,6 @@
 def doDebugBuild(coverageEnabled=false) {
   def parallelism = params.PARALLELISM
-  if (parallelism == null) {
+  if (!parallelism) {
     parallelism = 4
   }
   def cmakeOptions = ""
@@ -46,11 +46,11 @@ def doTestStep(testList) {
   """
   def testExitCode = sh(script: """IROHA_POSTGRES_HOST=localhost IROHA_POSTGRES_PORT=5433 cd build && ctest --output-on-failure -R '${testList}' """, returnStatus: true)
   if (testExitCode != 0) {
-    currentBuild.currentResult = "UNSTABLE"
+    currentBuild.result = "UNSTABLE"
   }
 }
  
-def doPostCoverageCoberturaStep() {
+def doPostCoverageSonarStep() {
   sh "cmake --build build --target cppcheck"
     // Sonar
     if (env.CHANGE_ID != null) {
@@ -66,7 +66,7 @@ def doPostCoverageCoberturaStep() {
     }
 }
 
-def doPostCoverageSonarStep() {
+def doPostCoverageCoberturaStep() {
   sh "cmake --build build --target coverage.info"
   sh "python /usr/local/bin/lcov_cobertura.py build/reports/coverage.info -o build/reports/coverage.xml"
   cobertura autoUpdateHealth: false, autoUpdateStability: false, coberturaReportFile: '**/build/reports/coverage.xml', conditionalCoverageTargets: '75, 50, 0', failUnhealthy: false, failUnstable: false, lineCoverageTargets: '75, 50, 0', maxNumberOfBuilds: 50, methodCoverageTargets: '75, 50, 0', onlyStable: false, zoomCoverageChart: false

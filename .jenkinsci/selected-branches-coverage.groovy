@@ -8,7 +8,7 @@ def selectedBranchesCoverage() {
 		return true
 	}
 	else {
-		return env.GIT_LOCAL_BRANCH in branch_coverage || env.CHANGE_ID != null && env.GIT_COMMIT == env.GIT_PREVIOUS_COMMIT
+		return env.GIT_LOCAL_BRANCH in branch_coverage || env.CHANGE_ID != null && !env.GIT_PREVIOUS_COMMIT
 	}
 }
 

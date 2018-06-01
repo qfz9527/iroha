@@ -13,7 +13,7 @@ def doReleaseBuild() {
   if (env.NODE_NAME.contains('arm7')) {
     parallelism = 1
   }
-  if ( env.NODE_NAME ==~ /^x86_64.+/ ) {
+  if (env.NODE_NAME.contains('x86_64')) {
     parallelism = 8
   }
   def platform = sh(script: 'uname -m', returnStdout: true).trim()

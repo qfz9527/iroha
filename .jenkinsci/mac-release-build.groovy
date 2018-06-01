@@ -2,7 +2,7 @@
 
 def doReleaseBuild(coverageEnabled=false) {
   def parallelism = params.PARALLELISM
-  if (parallelism == null) {
+  if (!parallelism) {
     parallelism = 4
   }
   def scmVars = checkout scm
