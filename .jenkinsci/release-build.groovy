@@ -1,21 +1,13 @@
 #!/usr/bin/env groovy
 
 def doReleaseBuild() {
-  def parallelism = params.PARALLELISM
   def manifest = load ".jenkinsci/docker-manifest.groovy"
   // params are always null unless job is started
   // this is the case for the FIRST build only.
   // So just set this to same value as default. 
   // This is a known bug. See https://issues.jenkins-ci.org/browse/JENKINS-41929
-  if (!parallelism) {
-    parallelism = 4
-  }
-  if (env.NODE_NAME.contains('arm7')) {
-    parallelism = 1
-  }
-  if (env.NODE_NAME.contains('x86_64')) {
-    parallelism = 8
-  }
+  def setter = load ".jenkinsci/choose-platform.groovy"
+  def parallelism = setter.setParallelism(params.PARALLELISM)
   def platform = sh(script: 'uname -m', returnStdout: true).trim()
   sh "mkdir /tmp/${env.GIT_COMMIT}-${BUILD_NUMBER} || true"
   iC = docker.image("${DOCKER_REGISTRY_BASENAME}:${platform}-develop-build")

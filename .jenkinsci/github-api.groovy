@@ -1,5 +1,16 @@
 #!/usr/bin/env groovy
 
+enum GithubPRStatus {
+	APPROVED, CHANGES_REQUESTED
+}
+enum MergeTarget {
+	merge, squash
+}
+enum ChangeTarget {
+	master, develop, trunk
+}
+
+// merges pull request using GitHub API in case it meets the merging criteria
 def mergePullRequest() {
 	if ( ! ( checkMergeAcceptance() ) ) { return false  }
 	withCredentials([string(credentialsId: 'jenkins-integration-test', variable: 'sorabot')]) {
@@ -22,6 +33,9 @@ def mergePullRequest() {
 	}
 }
 
+// check merge acceptance by:
+// - at least 2 "approved and NO "changes_requested" in reviews
+// - e-mail of the commit does not match Jenkins user who launched this build
 def checkMergeAcceptance() {
 	def approvalsRequired = 2
 	def gitCommitterEmail = sh(script: 'git --no-pager show -s --format=\'%ae\'', returnStdout: true).trim()
@@ -36,8 +50,11 @@ def checkMergeAcceptance() {
 		jsonResponseReview = slurper.parseText(jsonResponseReview)
 		if (jsonResponseReview.size() > 0) {
 			jsonResponseReview.each {
-				if ("${it.state}" == "APPROVED") {
+				if ("${it.state}" == GithubPRStatus.APPROVED.toString()) {
 					approvalsRequired -= 1
+				}
+				if ("${it.state}" == GithubPRStatus.CHANGES_REQUESTED.toString()) {
+					return false
 				}
 			}
 		}
@@ -55,15 +72,17 @@ def checkMergeAcceptance() {
 	}
 }
 
+// returns merge method based on target branch (squash&merge vs merge)
 def getMergeMethod() {
-	if ( env.CHANGE_TARGET == 'master') {
-		return "merge"
+	if (env.CHANGE_TARGET == ChangeTarget.master.toString()) {
+		return MergeTarget.merge.toString()
 	}
 	else {
-		return "squash"
+		return MergeTarget.squash.toString()
 	}
 }
 
+// returns PR reviewers in the form of "@reviewer1 @reviewer2 ... @reviewerN" to mention PR reviewers about build result
 def getPullRequestReviewers() {
 	def slurper = new groovy.json.JsonSlurperClassic()
 	def ghUsersList = ''
@@ -84,7 +103,7 @@ def getPullRequestReviewers() {
 	jsonResponseReview = slurper.parseText(jsonResponseReview)
 	if (jsonResponseReview.size() > 0) {
 		jsonResponseReview.each {
-			if ("${it.state}" == "APPROVED") {
+			if ("${it.state}" == GithubPRStatus.APPROVED.toString() || "${it.state}" == GithubPRStatus.CHANGES_REQUESTED.toString()) {
 				ghUsersList = ghUsersList.concat("@${it.user.login} ")
 			}
 		}
@@ -92,6 +111,7 @@ def getPullRequestReviewers() {
 	return ghUsersList
 }
 
+// post a comment on PR via GitHub API
 def writePullRequestComment() {
 	def ghUsersList = getPullRequestReviewers()
 	withCredentials([string(credentialsId: 'jenkins-integration-test', variable: 'sorabot')]) {

@@ -1,8 +1,6 @@
 def doDebugBuild(coverageEnabled=false) {
-  def parallelism = params.PARALLELISM
-  if (!parallelism) {
-    parallelism = 4
-  }
+  def setter = load ".jenkinsci/choose-platform.groovy"
+  def parallelism = setter.setParallelism(params.PARALLELISM)
   def cmakeOptions = ""
   if ( coverageEnabled ) {
     cmakeOptions = " -DCOVERAGE=ON "
@@ -27,7 +25,7 @@ def doDebugBuild(coverageEnabled=false) {
       -DIROHA_VERSION=${env.IROHA_VERSION} \
       ${cmakeOptions}
   """
-  sh "cmake --build build -- -j${params.PARALLELISM}"
+  sh "cmake --build build -- -j${parallelism}"
   sh "ccache --show-stats"
 }
 
@@ -52,18 +50,15 @@ def doTestStep(testList) {
  
 def doPostCoverageSonarStep() {
   sh "cmake --build build --target cppcheck"
-    // Sonar
-    if (env.CHANGE_ID != null) {
-      sh """
-        sonar-scanner \
-          -Dsonar.github.disableInlineComments \
-          -Dsonar.github.repository='hyperledger/iroha' \
-          -Dsonar.analysis.mode=preview \
-          -Dsonar.login=${SONAR_TOKEN} \
-          -Dsonar.projectVersion=${BUILD_TAG} \
-          -Dsonar.github.oauth=${SORABOT_TOKEN}
-      """
-    }
+  sh """
+      sonar-scanner \
+        -Dsonar.github.disableInlineComments \
+        -Dsonar.github.repository='hyperledger/iroha' \
+        -Dsonar.analysis.mode=preview \
+        -Dsonar.login=${SONAR_TOKEN} \
+        -Dsonar.projectVersion=${BUILD_TAG} \
+        -Dsonar.github.oauth=${SORABOT_TOKEN}
+    """
 }
 
 def doPostCoverageCoberturaStep() {

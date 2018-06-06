@@ -4,23 +4,14 @@ def doDebugBuild(coverageEnabled=false) {
   def dPullOrBuild = load ".jenkinsci/docker-pull-or-build.groovy"
   def manifest = load ".jenkinsci/docker-manifest.groovy"
   def pCommit = load ".jenkinsci/previous-commit.groovy"
-  def parallelism = params.PARALLELISM
+  def setter = load ".jenkinsci/choose-platform.groovy"
+  def parallelism = setter.setParallelism(params.PARALLELISM)
   def platform = sh(script: 'uname -m', returnStdout: true).trim()
   PREVIOUS_COMMIT = pCommit.previousCommitOrCurrent()
   // params are always null unless job is started
   // this is the case for the FIRST build only.
-  // So just set this to same value as default. 
+  // So just set this to same value as default.
   // This is a known bug. See https://issues.jenkins-ci.org/browse/JENKINS-41929
-  if (!parallelism) {
-    parallelism = 4
-  }
-  if (env.NODE_NAME.contains('arm7')) {
-    parallelism = 1
-  }
-  if (env.NODE_NAME.contains('x86_64')) {
-    parallelism = 8
-  }
-  // count docker image file in case there could be pre-build image saved in file
 
   def iC = dPullOrBuild.dockerPullOrUpdate("${platform}-develop-build",
                                            "${env.GIT_RAW_BASE_URL}/${env.GIT_COMMIT}/docker/develop/Dockerfile",
@@ -125,9 +116,8 @@ def doPostCoverageCoberturaStep() {
   }
   def iC = docker.image("${DOCKER_AGENT_IMAGE}")
   iC.inside() {
-    sh "cmake --build build --target coverage.info"
-    sh "python /tmp/lcov_cobertura.py build/reports/coverage.info -o build/reports/coverage.xml"
-    cobertura autoUpdateHealth: false, autoUpdateStability: false, coberturaReportFile: '**/build/reports/coverage.xml', conditionalCoverageTargets: '75, 50, 0', failUnhealthy: false, failUnstable: false, lineCoverageTargets: '75, 50, 0', maxNumberOfBuilds: 50, methodCoverageTargets: '75, 50, 0', onlyStable: false, zoomCoverageChart: false
+    def step = load "mac-debug-build.groovy"
+    step.doPostCoverageCoberturaStep()
   }
 }
 
