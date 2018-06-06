@@ -1,8 +1,11 @@
 #!/usr/bin/env groovy
 
-enum TestTypes {
-	module, integration, system, cmake, regression, benchmark, framework	
+try {
+	enum TestTypes {
+		module, integration, system, cmake, regression, benchmark, framework	
+	}
 }
+finally { }
 
 // format the enum elements output like "(val1|val2|...|valN)*"
 def printRange(start, end) {
