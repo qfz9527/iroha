@@ -1,5 +1,5 @@
 def doDebugBuild(coverageEnabled=false) {
-  def setter = load ".jenkinsci/choose-platform.groovy"
+  def setter = load ".jenkinsci/set-parallelism.groovy"
   def parallelism = setter.setParallelism(params.PARALLELISM)
   def cmakeOptions = ""
   if ( coverageEnabled ) {

@@ -1,7 +1,7 @@
 #!/usr/bin/env groovy
 
 def doReleaseBuild(coverageEnabled=false) {
-  def setter = load ".jenkinsci/choose-platform.groovy"
+  def setter = load ".jenkinsci/set-parallelism.groovy"
   def parallelism = setter.setParallelism(params.PARALLELISM)
   def scmVars = checkout scm
   env.IROHA_VERSION = "0x${scmVars.GIT_COMMIT}"
