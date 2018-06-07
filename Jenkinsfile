@@ -64,6 +64,7 @@ pipeline {
       agent { label 'master' }
       steps {
         script {
+          load ".jenkinsci/enums.groovy"
           GIT_COMMITER_EMAIL = sh(script: """git --no-pager show -s --format='%ae' ${env.GIT_COMMIT}""", returnStdout: true).trim()
           if (GIT_LOCAL_BRANCH != "develop") {
             def builds = load ".jenkinsci/cancel-builds-same-job.groovy"
