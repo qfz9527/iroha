@@ -3,4 +3,8 @@ enum TestTypes {
 	public TestTypes() {}
 }
 
+enum CoveragePlatforms {
+  x86_64_aws_cov, mac, armv8, armv7
+}
+
 return this

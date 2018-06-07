@@ -17,18 +17,20 @@ def macPostStep() {
   artifacts.uploadArtifacts(filePaths, sprintf('/iroha/macos/%1$s-%2$s-%3$s', [GIT_LOCAL_BRANCH, sh(script: 'date "+%Y%m%d"', returnStdout: true).trim(), commit.substring(0,6)]))
 }
 
-// clean docker containers after the stage
+// clean folders after the build
 def cleanUp() {
   if ( ! env.NODE_NAME.contains('x86_64') ) {
-    def cleanup = load ".jenkinsci/docker-cleanup.groovy"
-    cleanup.doDockerCleanup()
+    sh """
+      #remove folder with iroha.deb package and Dockerfiles
+      rm -rf /tmp/${env.GIT_COMMIT}-${BUILD_NUMBER}
+      rm -rf /tmp/${env.GIT_COMMIT}
+    """
   }
 }
 
 // stop postgres and remove workspace folder (for mac)
 def macCleanUp() {
   sh """
-    pg_ctl -D /var/jenkins/${GIT_COMMIT}-${BUILD_NUMBER}/ stop && \
     rm -rf /var/jenkins/${GIT_COMMIT}-${BUILD_NUMBER}/
   """
 }

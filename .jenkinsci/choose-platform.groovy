@@ -1,9 +1,5 @@
 #!/usr/bin/env groovy
 
-enum CoveragePlatforms {
-  x86_64_aws_cov, mac, armv8, armv7
-}
-
 def choosePlatform() {
   if (params.Merge_PR) {
 		return CoveragePlatforms.x86_64_aws_cov.toString()

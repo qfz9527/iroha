@@ -295,6 +295,14 @@ pipeline {
               debugBuild.doTestStep(testSelect.chooseTestType())
             }
           }
+          post {
+            cleanup {
+              script {
+                def clean = load ".jenkinsci/docker-cleanup.groovy"
+                clean.doDockerCleanup()  
+              }
+            }
+          }
         }
         stage('ARMv7') {
           when {
@@ -317,6 +325,14 @@ pipeline {
               debugBuild.doTestStep(testSelect.chooseTestType())
             }
           }
+          post {
+            cleanup {
+              script {
+                def clean = load ".jenkinsci/docker-cleanup.groovy"
+                clean.doDockerCleanup()  
+              }
+            }
+          }
         }
         stage('ARMv8') {
           when {
@@ -337,6 +353,14 @@ pipeline {
               def debugBuild = load ".jenkinsci/debug-build.groovy"
               def testSelect = load ".jenkinsci/test-launcher.groovy"
               debugBuild.doTestStep(testSelect.chooseTestType())
+            }
+          }
+          post {
+            cleanup {
+              script {
+                def clean = load ".jenkinsci/docker-cleanup.groovy"
+                clean.doDockerCleanup()  
+              }
             }
           }
         }
@@ -363,6 +387,13 @@ pipeline {
               def macDebugBuild = load ".jenkinsci/mac-debug-build.groovy"
               def testSelect = load ".jenkinsci/test-launcher.groovy"
               macDebugBuild.doTestStep(testSelect.chooseTestType())
+            }
+          }
+          post {
+            cleanup {
+              script {
+                sh "pg_ctl -D /var/jenkins/${GIT_COMMIT}-${BUILD_NUMBER}/ stop"
+              }
             }
           }
         }
@@ -598,30 +629,27 @@ pipeline {
     }
     cleanup {
       script {
+        def post = load ".jenkinsci/linux-post-step.groovy"
         def notify = load ".jenkinsci/notifications.groovy"
         notify.notifyBuildResults()
 
         if (params.Linux || params.Merge_PR) {
           node ('x86_64_aws_test') {
-            def post = load ".jenkinsci/linux-post-step.groovy"
             post.cleanUp()
           }
         }
         if (params.ARMv8 || params.Merge_PR) {
           node ('armv8') {
-            def post = load ".jenkinsci/linux-post-step.groovy"
             post.cleanUp()
           }
         }
         if (params.ARMv7 || params.Merge_PR) {
           node ('armv7') {
-            def post = load ".jenkinsci/linux-post-step.groovy"
             post.cleanUp()
           }
         }
         if (params.MacOS || params.Merge_PR) {
           node ('mac') {
-            def post = load ".jenkinsci/linux-post-step.groovy"
             post.macCleanUp()
           }
         }
