@@ -37,7 +37,7 @@ def chooseTestType() {
 		}
 	}
 	// just choose module tests
-	return printRange(TestTypes.module, TestTypes.module)
+	return [TestTypes.module.toString(), "*"].join('')
 }
 
 return this
