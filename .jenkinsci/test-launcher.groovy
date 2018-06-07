@@ -1,7 +1,7 @@
 #!/usr/bin/env groovy
 
 try {
-	def enum TestTypes {
+	enum TestTypes {
 		module, integration, system, cmake, regression, benchmark, framework
 		public TestTypes() {}
 	}
