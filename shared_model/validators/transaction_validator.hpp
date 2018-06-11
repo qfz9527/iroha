@@ -41,6 +41,7 @@ namespace shared_model {
           : validator_(validator) {}
 
       ReasonsGroupType operator()(
+          const interface::Transaction &tx,
           const interface::AddAssetQuantity &aaq) const {
         ReasonsGroupType reason;
         addInvalidCommand(reason, "AddAssetQuantity");
@@ -52,7 +53,8 @@ namespace shared_model {
         return reason;
       }
 
-      ReasonsGroupType operator()(const interface::AddPeer &ap) const {
+      ReasonsGroupType operator()(const interface::Transaction &tx,
+                                  const interface::AddPeer &ap) const {
         ReasonsGroupType reason;
         addInvalidCommand(reason, "AddPeer");
 
@@ -61,7 +63,8 @@ namespace shared_model {
         return reason;
       }
 
-      ReasonsGroupType operator()(const interface::AddSignatory &as) const {
+      ReasonsGroupType operator()(const interface::Transaction &tx,
+                                  const interface::AddSignatory &as) const {
         ReasonsGroupType reason;
         addInvalidCommand(reason, "AddSignatory");
 
@@ -71,7 +74,8 @@ namespace shared_model {
         return reason;
       }
 
-      ReasonsGroupType operator()(const interface::AppendRole &ar) const {
+      ReasonsGroupType operator()(const interface::Transaction &tx,
+                                  const interface::AppendRole &ar) const {
         ReasonsGroupType reason;
         addInvalidCommand(reason, "AppendRole");
 
@@ -81,7 +85,8 @@ namespace shared_model {
         return reason;
       }
 
-      ReasonsGroupType operator()(const interface::CreateAccount &ca) const {
+      ReasonsGroupType operator()(const interface::Transaction &tx,
+                                  const interface::CreateAccount &ca) const {
         ReasonsGroupType reason;
         addInvalidCommand(reason, "CreateAccount");
 
@@ -92,7 +97,8 @@ namespace shared_model {
         return reason;
       }
 
-      ReasonsGroupType operator()(const interface::CreateAsset &ca) const {
+      ReasonsGroupType operator()(const interface::Transaction &tx,
+                                  const interface::CreateAsset &ca) const {
         ReasonsGroupType reason;
         addInvalidCommand(reason, "CreateAsset");
 
@@ -103,7 +109,8 @@ namespace shared_model {
         return reason;
       }
 
-      ReasonsGroupType operator()(const interface::CreateDomain &cd) const {
+      ReasonsGroupType operator()(const interface::Transaction &tx,
+                                  const interface::CreateDomain &cd) const {
         ReasonsGroupType reason;
         addInvalidCommand(reason, "CreateDomain");
 
@@ -113,7 +120,8 @@ namespace shared_model {
         return reason;
       }
 
-      ReasonsGroupType operator()(const interface::CreateRole &cr) const {
+      ReasonsGroupType operator()(const interface::Transaction &tx,
+                                  const interface::CreateRole &cr) const {
         ReasonsGroupType reason;
         addInvalidCommand(reason, "CreateRole");
 
@@ -124,7 +132,8 @@ namespace shared_model {
         return reason;
       }
 
-      ReasonsGroupType operator()(const interface::DetachRole &dr) const {
+      ReasonsGroupType operator()(const interface::Transaction &tx,
+                                  const interface::DetachRole &dr) const {
         ReasonsGroupType reason;
         addInvalidCommand(reason, "DetachRole");
 
@@ -134,7 +143,8 @@ namespace shared_model {
         return reason;
       }
 
-      ReasonsGroupType operator()(const interface::GrantPermission &gp) const {
+      ReasonsGroupType operator()(const interface::Transaction &tx,
+                                  const interface::GrantPermission &gp) const {
         ReasonsGroupType reason;
         addInvalidCommand(reason, "GrantPermission");
 
@@ -145,7 +155,8 @@ namespace shared_model {
         return reason;
       }
 
-      ReasonsGroupType operator()(const interface::RemoveSignatory &rs) const {
+      ReasonsGroupType operator()(const interface::Transaction &tx,
+                                  const interface::RemoveSignatory &rs) const {
         ReasonsGroupType reason;
         addInvalidCommand(reason, "RemoveSignatory");
 
@@ -154,7 +165,8 @@ namespace shared_model {
 
         return reason;
       }
-      ReasonsGroupType operator()(const interface::RevokePermission &rp) const {
+      ReasonsGroupType operator()(const interface::Transaction &tx,
+                                  const interface::RevokePermission &rp) const {
         ReasonsGroupType reason;
         addInvalidCommand(reason, "RevokePermission");
 
@@ -166,6 +178,7 @@ namespace shared_model {
       }
 
       ReasonsGroupType operator()(
+          const interface::Transaction &tx,
           const interface::SetAccountDetail &sad) const {
         ReasonsGroupType reason;
         addInvalidCommand(reason, "SetAccountDetail");
@@ -174,10 +187,18 @@ namespace shared_model {
         validator_.validateAccountDetailKey(reason, sad.key());
         validator_.validateAccountDetailValue(reason, sad.value());
 
+        auto domain_of = [](auto s) { return s.substr(s.find('@') + 1); };
+
+        if (domain_of(tx.creatorAccountId()) != domain_of(sad.accountId())) {
+          reason.second.push_back(
+              "Cannot set detail of account in different domain");
+        }
+
         return reason;
       }
 
-      ReasonsGroupType operator()(const interface::SetQuorum &sq) const {
+      ReasonsGroupType operator()(const interface::Transaction &tx,
+                                  const interface::SetQuorum &sq) const {
         ReasonsGroupType reason;
         addInvalidCommand(reason, "SetQuorum");
 
@@ -188,6 +209,7 @@ namespace shared_model {
       }
 
       ReasonsGroupType operator()(
+          const interface::Transaction &tx,
           const interface::SubtractAssetQuantity &saq) const {
         ReasonsGroupType reason;
         addInvalidCommand(reason, "SubtractAssetQuantity");
@@ -199,7 +221,8 @@ namespace shared_model {
         return reason;
       }
 
-      ReasonsGroupType operator()(const interface::TransferAsset &ta) const {
+      ReasonsGroupType operator()(const interface::Transaction &tx,
+                                  const interface::TransferAsset &ta) const {
         ReasonsGroupType reason;
         addInvalidCommand(reason, "TransferAsset");
 
@@ -269,7 +292,9 @@ namespace shared_model {
         }
 
         for (const auto &command : tx.commands()) {
-          auto reason = boost::apply_visitor(command_validator_, command.get());
+          auto reason = boost::apply_visitor(
+              [&](const auto &cmd) { return command_validator_(tx, cmd); },
+              command.get());
           if (not reason.second.empty()) {
             answer.addReason(std::move(reason));
           }
